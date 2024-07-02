@@ -1,0 +1,18 @@
+{
+  "name": "example-big-file-upload",
+  "version": "1.0.0",
+  "description": "An example of upload big files",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "sbob@qq.com",
+  "license": "MIT",
+  "dependencies": {
+    "multiparty": "^4.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9"
+  }
+}
