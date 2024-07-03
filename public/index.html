@@ -4,61 +4,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
+  <title>Upload Big File Example</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"
+    integrity="sha512-iWbxiCA4l1WTD0rRctt/BfDEmDC5PiVqFc6c1Rhj/GKjuj6tqrjrikTw3Sypm/eEgMa7jSOS9ydmDlOtxJKlSQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="./public/upload.js"></script>
+  <style>
+    #loading {
+      position: fixed;
+      inset: 0;
+      cursor: progress;
+      background-color: lightgray;
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
   <input type="file" name="file" id="file">
-  <div id="loading" style="display: none;">loading...</div>
+  <div id="loading">loading...</div>
   <script>
-    const file = document.getElementById('file');
-    file.addEventListener('change', async (e) => {
-      /**
-       * @type {File}
-       */
-      const file = e.target.files[0]
+    const inputEl = document.getElementById('file');
+    const loadingEl = document.getElementById('loading');
+
+    inputEl.addEventListener('change', async (e) => {
+      loadingEl.style.display = 'block'
+      const file = e.target.files[0];
       if (file) {
-        document.getElementById('loading').style.display = 'block'
-        console.log(file)
-        const slices = getSlice(file)
-        console.log(slices)
-        for (const [idx, part] of slices.entries()) {
-          await upload(part, slices.length, idx, file.name)
+        try {
+          await upload(file, 1)
+        } catch (e) {
+          console.log(e)
+        } finally {
+          loadingEl.style.display = 'none'
         }
-        document.getElementById('loading').style.display = 'none'
       }
     })
-
-    /**
-     * @param {File} file
-     * @param {number} SliceSize
-     */
-    function getSlice(file, sliceSize = 100 * 1024 * 1024) {
-      const arr = [];
-      let i = 0;
-      while (i * sliceSize < file.size) {
-        arr.push(file.slice(i * sliceSize, (i + 1) * sliceSize))
-        i++
-      }
-      return arr
-    }
-
-    function upload(fileOrSlice, total, idx, name) {
-      return new Promise((resolve, reject) => {
-        const formData = new FormData()
-        formData.append('name', name)
-        formData.append('idx', idx)
-        formData.append('total', total)
-        formData.append('file', fileOrSlice)
-        return fetch('/upload', {
-          method: 'POST',
-          body: formData
-        }).then(res => {
-          resolve(res)
-        }, reject)
-        reader.readAsArrayBuffer(slice)
-      })
-    }
   </script>
 </body>
 
