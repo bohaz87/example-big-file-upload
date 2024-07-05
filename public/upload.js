@@ -2,7 +2,7 @@
  * @param {File} file
  * @param {number} SliceSize
  */
-function getSlice(file, sliceSize = 50 * 1024 * 1024) {
+function getSlice(file, sliceSize = 10 * 1024 * 1024) {
   const arr = [];
   let i = 0;
   while (i * sliceSize < file.size) {
@@ -40,35 +40,35 @@ function uploadSlice(
  * @param {File} file
  * @param {number|boolean} concurrent
  */
-async function upload(file, concurrent = false) {
-  const slices = getSlice(file);
-  if (concurrent === false) {
-    concurrent = 1;
-  } else if (concurrent === true) {
-    concurrent = slices.length;
-  }
-
+async function upload(file) {
+  let slices = getSlice(file);
+  document.getElementById("loading").innerText = "正在计算Hash...";
   const hash = await getHash(slices);
-  const { exist, uri } = await checkFileExist(hash);
-  if (exist) {
-    console.log("file already exsits, upload success");
+  document.getElementById("loading").innerText = "正在检查文件...";
+  const { exist, done, indexes, uri } = await checkFileExist(hash);
+  if (exist && done) {
+    console.log("file already exists, upload success");
     return;
   }
+  document.getElementById("loading").innerText = "开始上传...";
 
   const total = slices.length;
   let start = 0;
-  while (start <= total) {
-    await Promise.all(
-      slices.slice(start, start + concurrent).map((blob, idx) =>
-        uploadSlice(blob, {
-          totalSlices: total,
-          sliceIndex: start + idx,
-          fileName: file.name,
-          fileHash: hash,
-        })
-      )
-    );
-    start += concurrent;
+  while (start < total) {
+    if (indexes && indexes.includes(start)) {
+      start++;
+      continue;
+    }
+
+    await uploadSlice(slices[start], {
+      totalSlices: total,
+      sliceIndex: start,
+      fileName: file.name,
+      fileHash: hash,
+    });
+    // delay for 1 second
+    // await new Promise((res) => setTimeout(res, ));
+    start++;
   }
 }
 
@@ -77,37 +77,17 @@ async function upload(file, concurrent = false) {
  * @param {Blob[]} slices
  */
 function getHash(slices) {
-  const { promise, resolve, reject } = Promise.withResolvers();
-  const fileReader = new FileReader();
-  const spark = new SparkMD5.ArrayBuffer();
-  let currentChunk = 0;
-
-  fileReader.onload = function (e) {
-    console.log("read chunk nr", currentChunk + 1, "of", slices.length);
-    spark.append(e.target.result); // Append array buffer
-    currentChunk++;
-
-    if (currentChunk < slices.length) {
-      loadNext();
-    } else {
-      console.log("finished loading");
-      const hash = spark.end();
-      console.info("computed hash", hash); // Compute hash
-      resolve(hash);
+  return new Promise((resolve, reject) => {
+    try {
+      const worker = new Worker("worker.js");
+      worker.postMessage(slices);
+      worker.onmessage = (e) => {
+        resolve(e.data);
+      };
+    } catch (e) {
+      reject(e);
     }
-  };
-
-  fileReader.onerror = function (err) {
-    console.err("oops, something went wrong.");
-    reject(err);
-  };
-
-  function loadNext() {
-    fileReader.readAsArrayBuffer(slices[currentChunk]);
-  }
-
-  loadNext();
-  return promise;
+  });
 }
 
 async function checkFileExist(hash) {

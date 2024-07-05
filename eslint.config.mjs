@@ -19,6 +19,7 @@ export default [
     files: ["public/*.js"],
     languageOptions: {
       globals: {
+        SparkMD5: true,
         ...globals.browser,
       },
     },

@@ -6,8 +6,8 @@ import multiparty from "multiparty";
 import path from "path";
 import { promisify } from "util";
 
-const __dirname = import.meta.dirname;
-const uplaodFolder = path.join(__dirname, "upload/");
+const root = path.resolve(import.meta.dirname, "../");
+const uplaodFolder = path.join(root, "upload/");
 /**
  * Store file temp path
  * @type {Record<string, string[]>}
@@ -27,12 +27,18 @@ let g_hashes = {};
 const app = new koa();
 const router = new Router();
 
-app.use(serveStatic(path.join(__dirname, "public")));
+app.use(serveStatic(path.join(root, "public")));
 
 router.get("/upload/exists", (ctx, _next) => {
   const hash = ctx.query.hash;
   if (hash in g_hashes) {
-    ctx.body = { exist: true, uri: g_hashes[hash] };
+    ctx.body = { exist: true, done: true, uri: g_hashes[hash] };
+  } else if (hash in g_files) {
+    ctx.body = {
+      exist: true,
+      done: false,
+      indexes: g_files[hash].filter((str) => str).map((hash, idx) => idx),
+    };
   } else {
     ctx.body = { exist: false };
   }
@@ -44,9 +50,11 @@ router.post("/upload", (ctx) => {
     const { promise, resolve, reject } = Promise.withResolvers();
     form.parse(ctx.req, async (err, fields, files) => {
       if (err) {
-        console.log(err);
-        ctx.throw(500, "Parse request failed");
-        reject();
+        reject(err);
+        return;
+      }
+      if (!files.file[0]) {
+        reject("no file");
         return;
       }
 
@@ -54,13 +62,19 @@ router.post("/upload", (ctx) => {
       const idx = Number(fields.idx[0]);
       const total = Number(fields.total[0]);
       const hash = fields.hash[0];
-      g_files[name] ??= Array(total);
-      g_files[name][idx] = files.file[0].path;
+      g_files[hash] ??= Array(total).fill("");
+      g_files[hash][idx] = files.file[0].path;
       const newFileName = hash + path.extname(name);
-      g_hashes[hash] = path.join("/files/", newFileName);
 
       if (idx === total - 1) {
-        await joinFileWithStream(g_files[name], newFileName);
+        try {
+          await joinFileWithStream(g_files[hash], newFileName);
+          g_hashes[hash] = path.join(root, "/files/", newFileName);
+          delete g_files[hash];
+        } catch (e) {
+          reject(e);
+          return;
+        }
       }
       ctx.type = "json";
       ctx.body = {
@@ -100,11 +114,10 @@ async function joinFileWithStream(fileList, destFileName) {
     const readStream = fs.createReadStream(fileList[index]);
     readStream.pipe(writeStream, { end: false });
     readStream.on("end", () => {
-      delete g_files[destFileName];
       pipeNextFile(index + 1);
     });
     readStream.on("error", (err) => {
-      delete g_files[destFileName];
+      // delete g_files[destFileName];
       reject(err);
     });
   }

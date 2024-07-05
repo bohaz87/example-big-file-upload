@@ -5,16 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Upload Big File Example</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"
+  <link rel="prefetch" href="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"
     integrity="sha512-iWbxiCA4l1WTD0rRctt/BfDEmDC5PiVqFc6c1Rhj/GKjuj6tqrjrikTw3Sypm/eEgMa7jSOS9ydmDlOtxJKlSQ=="
-    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    crossorigin="anonymous" referrerpolicy="no-referrer" as="script" />
+  <link rel="prefetch" href="./worker.js" as="script" />
   <script src="./upload.js"></script>
   <style>
     #loading {
-      position: fixed;
-      inset: 0;
-      cursor: progress;
-      background-color: lightgray;
       display: none;
     }
   </style>
@@ -23,6 +20,7 @@
 <body>
   <input type="file" name="file" id="file">
   <div id="loading">loading...</div>
+  <p>You can refresh page to abort upload</p>
 </body>
 
 </html>
