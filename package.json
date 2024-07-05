@@ -10,9 +10,16 @@
   "author": "sbob@qq.com",
   "license": "MIT",
   "dependencies": {
+    "koa": "^2.15.3",
+    "koa-router": "^12.0.1",
+    "koa-static": "^5.0.0",
     "multiparty": "^4.2.3"
   },
   "devDependencies": {
-    "@types/node": "^20.14.9"
+    "@eslint/js": "^9.6.0",
+    "@types/koa": "^2.15.0",
+    "@types/node": "^20.14.9",
+    "eslint": "^9.6.0",
+    "globals": "^15.8.0"
   }
 }

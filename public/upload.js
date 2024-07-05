@@ -117,3 +117,22 @@ async function checkFileExist(hash) {
 
   return data;
 }
+
+window.onload = function () {
+  const inputEl = document.getElementById("file");
+  const loadingEl = document.getElementById("loading");
+
+  inputEl.addEventListener("change", async (e) => {
+    loadingEl.style.display = "block";
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        await upload(file, 1);
+      } catch (e) {
+        console.log(e);
+      } finally {
+        loadingEl.style.display = "none";
+      }
+    }
+  });
+};

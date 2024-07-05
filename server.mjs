@@ -1,106 +1,52 @@
-import http from "http";
+import koa from "koa";
+import { default as serveStatic } from "koa-static";
+import Router from "koa-router";
 import fs from "fs";
 import multiparty from "multiparty";
 import path from "path";
 import { promisify } from "util";
 
 const __dirname = import.meta.dirname;
+const uplaodFolder = path.join(__dirname, "upload/");
 /**
  * Store file temp path
  * @type {Record<string, string[]>}
  */
 let g_files = {};
+/**
+ * Store file hashes
+ *
+ * key is the file hash
+ *
+ * value is the file uri
+ *
+ * @type {Record<string, string>}
+ */
 let g_hashes = {};
 
-http
-  .createServer((req, res) => {
-    console.log("req.url", req.url);
+const app = new koa();
+const router = new Router();
 
-    if (req.url === "/" || req.url.startsWith("/public")) {
-      return staticHandler(req, res);
-    } else if (/^\/upload\/exists/.test(req.url) && req.method === "GET") {
-      return checkFileExistHandler(req, res);
-    } else if (/^\/upload/.test(req.url) && req.method === "POST") {
-      return uploadHandler(req, res);
-    } else {
-      return notFoundHandler(req, res);
-    }
-  })
-  .listen(3000, () => {
-    console.log("Server running at http://127.0.0.1:3000/");
-  });
+app.use(serveStatic(path.join(__dirname, "public")));
 
-/**
- *
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
- */
-function notFoundHandler(req, res) {
-  res.writeHead(404, { "Content-Type": "text/plain" });
-  res.write("Not Found");
-  res.end();
-}
-
-function staticHandler(req, res) {
-  let filename = req.url;
-  if (filename === "/") {
-    filename = "/public/index.html";
-  }
-  const file = path.join(__dirname, filename);
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      return notFoundHandler(req, res);
-    }
-    res.writeHead(200);
-    res.write(data);
-    res.end();
-  });
-}
-
-/**
- *
- * @param {string} uri
- */
-function getSearchParams(uri) {
-  const params = {};
-  const query = uri.split("?")[1];
-  query.split("&").forEach((pair) => {
-    const [key, value] = pair.split("=");
-    params[key] = value;
-  });
-  return params;
-}
-
-/**
- *
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
- */
-function checkFileExistHandler(req, res) {
-  const params = getSearchParams(req.url);
-  const hash = params.hash;
+router.get("/upload/exists", (ctx, _next) => {
+  const hash = ctx.query.hash;
   if (hash in g_hashes) {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.write(JSON.stringify({ exist: true, uri: g_hashes[hash] }));
-    res.end();
+    ctx.body = { exist: true, uri: g_hashes[hash] };
   } else {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.write(JSON.stringify({ exist: false }));
-    res.end();
+    ctx.body = { exist: false };
   }
-}
+});
 
-function uploadHandler(req, res) {
-  if (
-    req.method === "POST" &&
-    req.headers["content-type"].startsWith("multipart/form-data")
-  ) {
+router.post("/upload", (ctx) => {
+  if (ctx.is("multipart/form-data")) {
     const form = new multiparty.Form();
-    form.parse(req, async (err, fields, files) => {
+    const { promise, resolve, reject } = Promise.withResolvers();
+    form.parse(ctx.req, async (err, fields, files) => {
       if (err) {
         console.log(err);
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Internal Server Error");
+        ctx.throw(500, "Parse request failed");
+        reject();
         return;
       }
 
@@ -116,30 +62,22 @@ function uploadHandler(req, res) {
       if (idx === total - 1) {
         await joinFileWithStream(g_files[name], newFileName);
       }
-      // Process fields and files
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          success: "true",
-          url: `/files/${newFileName}`,
-        })
-      );
+      ctx.type = "json";
+      ctx.body = {
+        success: "true",
+        url: `/files/${newFileName}`,
+      };
+      resolve();
     });
+    return promise;
   } else {
-    res.writeHead(405, { "Content-Type": "text/plain" });
-    res.end("Method Not Allowed");
+    ctx.throw(405, "Method Not Allowed");
   }
-}
-
-const uplaodFolder = path.join(__dirname, "upload/");
+});
 
 const mkdir = promisify(fs.mkdir);
-async function ensureUploadFolderExists() {
-  try {
-    await mkdir(uplaodFolder, { recursive: true });
-  } catch (e) {
-    console.log(e);
-  }
+function ensureUploadFolderExists() {
+  return mkdir(uplaodFolder, { recursive: true });
 }
 
 /**
@@ -151,11 +89,12 @@ async function joinFileWithStream(fileList, destFileName) {
   await ensureUploadFolderExists();
   const destFile = path.join(uplaodFolder, destFileName);
   const writeStream = fs.createWriteStream(destFile);
+  const { promise, resolve, reject } = Promise.withResolvers();
 
   function pipeNextFile(index) {
     if (index >= fileList.length) {
       writeStream.end();
-      console.log("files have been joined successfullly");
+      resolve();
       return;
     }
     const readStream = fs.createReadStream(fileList[index]);
@@ -164,6 +103,20 @@ async function joinFileWithStream(fileList, destFileName) {
       delete g_files[destFileName];
       pipeNextFile(index + 1);
     });
+    readStream.on("error", (err) => {
+      delete g_files[destFileName];
+      reject(err);
+    });
   }
   pipeNextFile(0);
+  return promise;
 }
+
+app.on("error", (error) => {
+  console.log(error);
+});
+
+app.use(router.routes());
+app.listen(3000, () => {
+  console.log("Server running at http://127.0.0.1:3000/");
+});
